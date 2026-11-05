@@ -750,6 +750,9 @@ abstract final class Pref {
   static bool get hideSideBarLabel =>
       _setting.get(SettingBoxKey.hideSideBarLabel, defaultValue: false);
 
+  static bool get sideBarFollowStatusBar =>
+      _setting.get(SettingBoxKey.sideBarFollowStatusBar, defaultValue: true);
+
   static bool get dynamicsShowAllFollowedUp => _setting.get(
     SettingBoxKey.dynamicsShowAllFollowedUp,
     defaultValue: false,

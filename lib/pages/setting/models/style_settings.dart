@@ -77,6 +77,14 @@ List<SettingsModel> get styleSettings => [
     onChanged: _onHorizontalScreenChanged,
   ),
   const SwitchModel(
+    title: '侧边栏跟随状态栏靠右',
+    subtitle: '状态栏在屏幕右侧时（如 iPhone Duo 内屏），把侧边栏放到右侧状态栏下方',
+    leading: Icon(Icons.vertical_split_outlined),
+    setKey: SettingBoxKey.sideBarFollowStatusBar,
+    defaultVal: true,
+    needReboot: true,
+  ),
+  const SwitchModel(
     title: '改用侧边栏',
     subtitle: '开启后底栏与顶栏被替换，且相关设置失效',
     leading: Icon(Icons.chrome_reader_mode_outlined),

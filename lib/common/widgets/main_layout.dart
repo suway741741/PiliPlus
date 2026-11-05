@@ -11,8 +11,12 @@ class MainLayout
     required this.sideBar,
     required this.bottomNav,
     required this.body,
+    this.sideBarAtEnd = false,
   });
 
+  /// The side bar on the right: iPhone Duo's inner display keeps the status bar in a
+  /// column on the right edge, and the side bar fits below it there.
+  final bool sideBarAtEnd;
   final Widget? sideBar;
   final Widget? bottomNav;
   final Widget body;
@@ -31,7 +35,15 @@ class MainLayout
   SlottedContainerRenderObjectMixin<MainType, RenderBox> createRenderObject(
     BuildContext context,
   ) {
-    return _RenderMainLayout();
+    return _RenderMainLayout(sideBarAtEnd);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    SlottedContainerRenderObjectMixin<MainType, RenderBox> renderObject,
+  ) {
+    (renderObject as _RenderMainLayout).sideBarAtEnd = sideBarAtEnd;
   }
 }
 
@@ -39,6 +51,16 @@ class _RenderMainLayout extends RenderBox
     with
         SlottedContainerRenderObjectMixin<MainType, RenderBox>,
         SlottedLayoutMixin {
+  _RenderMainLayout(this._sideBarAtEnd);
+
+  bool _sideBarAtEnd;
+  bool get sideBarAtEnd => _sideBarAtEnd;
+  set sideBarAtEnd(bool value) {
+    if (_sideBarAtEnd == value) return;
+    _sideBarAtEnd = value;
+    markNeedsLayout();
+  }
+
   RenderBox? get sideBar => childForSlot(.sideBar);
   RenderBox? get bottomNav => childForSlot(.bottomNav);
   RenderBox get body => childForSlot(.body)!;
@@ -60,9 +82,13 @@ class _RenderMainLayout extends RenderBox
         sideBar,
         BoxConstraints.tightFor(height: constraints.maxHeight),
       ).width;
-      setOffset(sideBar, .zero);
-
-      bodyOffset = Offset(sideBarWidth, 0);
+      if (_sideBarAtEnd) {
+        setOffset(sideBar, Offset(constraints.maxWidth - sideBarWidth, 0));
+        bodyOffset = .zero;
+      } else {
+        setOffset(sideBar, .zero);
+        bodyOffset = Offset(sideBarWidth, 0);
+      }
       bodyConstraints = BoxConstraints.tightFor(
         width: constraints.maxWidth - sideBarWidth,
         height: constraints.maxHeight,
