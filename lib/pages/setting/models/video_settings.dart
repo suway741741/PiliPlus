@@ -6,8 +6,10 @@ import 'package:PiliPlus/models/common/video/video_decode_type.dart';
 import 'package:PiliPlus/pages/setting/models/model.dart';
 import 'package:PiliPlus/pages/setting/widgets/ordered_multi_select_dialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/select_dialog.dart';
+import 'package:PiliPlus/pages/setting/widgets/thread_ripper_dialogs.dart';
 import 'package:PiliPlus/plugin/pl_player/models/audio_output_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/hwdec_type.dart';
+import 'package:PiliPlus/services/thread_ripper/thread_ripper.dart';
 import 'package:PiliPlus/utils/filtering_text.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
@@ -52,6 +54,32 @@ List<SettingsModel> get videoSettings => [
         ),
       ),
     ),
+  ),
+  SwitchModel(
+    title: '线程撕裂者加速',
+    subtitle: '多线程、多 CDN 节点并发加载视频，海外播放推荐开启。开启后下方的 CDN 设置对视频播放不生效',
+    leading: const Icon(MdiIcons.rocketLaunchOutline),
+    setKey: SettingBoxKey.threadRipperEnabled,
+    defaultVal: true,
+    onChanged: (_) => ThreadRipper.reload(),
+  ),
+  NormalModel(
+    title: '加速 CDN 模式',
+    leading: const Icon(MdiIcons.serverNetwork),
+    getSubtitle: () => '当前：${threadRipperModeDesc()}',
+    onTap: showThreadRipperModeDialog,
+  ),
+  NormalModel(
+    title: '加速线程数',
+    leading: const Icon(MdiIcons.speedometer),
+    getSubtitle: () => '当前：${threadRipperThreadsDesc()}，设备性能弱时可调到 4 到 8',
+    onTap: showThreadRipperThreadsDialog,
+  ),
+  const NormalModel(
+    title: '加速状态',
+    leading: Icon(Icons.insights_outlined),
+    subtitle: '目前总线程、下载速度和各节点情况',
+    onTap: showThreadRipperStatusDialog,
   ),
   NormalModel(
     title: 'CDN 设置',

@@ -51,6 +51,8 @@ import 'package:PiliPlus/plugin/pl_player/models/data_source.dart';
 import 'package:PiliPlus/plugin/pl_player/models/heart_beat_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
+import 'package:PiliPlus/services/thread_ripper/thread_ripper.dart'
+    show RipperSource;
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/connectivity_utils.dart';
 import 'package:PiliPlus/utils/extension/context_ext.dart';
@@ -135,6 +137,16 @@ class VideoDetailController extends GetxController
   late VideoItem firstVideo;
   String? videoUrl;
   String? audioUrl;
+
+  /// Every address of the current DASH tracks, for 线程撕裂者.
+  RipperSource? _ripperVideo;
+  RipperSource? _ripperAudio;
+
+  static RipperSource _ripperSourceOf(BaseItem item) => RipperSource(
+    item.playUrls.toList(),
+    bandwidth: item.bandWidth,
+    mimeType: item.mimeType,
+  );
   Duration? defaultST;
   Duration? playedTime;
   String playedTimePos(bool hasParams) {
@@ -703,6 +715,7 @@ class VideoDetailController extends GetxController
 
     firstVideo = findVideoByQa(currentVideoQa.code, setCodecs: true);
     videoUrl = VideoUtils.getCdnUrl(firstVideo.playUrls);
+    _ripperVideo = _ripperSourceOf(firstVideo);
 
     /// 根据currentAudioQa 重新设置audioUrl
     if (currentAudioQa != null) {
@@ -711,6 +724,7 @@ class VideoDetailController extends GetxController
         orElse: () => data.dash!.audio!.first,
       );
       audioUrl = VideoUtils.getCdnUrl(firstAudio.playUrls, isAudio: true);
+      _ripperAudio = _ripperSourceOf(firstAudio);
     }
 
     playerInit();
@@ -747,6 +761,8 @@ class VideoDetailController extends GetxController
           : NetworkSource(
               videoSource: videoUrl!,
               audioSource: audioUrl,
+              ripperVideo: _ripperVideo,
+              ripperAudio: audioUrl?.isNotEmpty == true ? _ripperAudio : null,
             ),
       seekTo: seek,
       duration: data.timeLength == null
@@ -919,6 +935,7 @@ class VideoDetailController extends GetxController
           }
 
           audioUrl = '';
+          _ripperVideo = _ripperAudio = null;
 
           // 实际为FLV/MP4格式，但已被淘汰，这里仅做兜底处理
           final videoQuality = VideoQuality.fromFormat(
@@ -965,6 +982,7 @@ class VideoDetailController extends GetxController
       currentVideoQa.value = VideoQuality.fromCode(targetQuality);
       _setVideoHeight();
       videoUrl = VideoUtils.getCdnUrl(firstVideo.playUrls);
+      _ripperVideo = _ripperSourceOf(firstVideo);
 
       AudioItem? firstAudio;
       final audioList = dash.audio;
@@ -974,9 +992,11 @@ class VideoDetailController extends GetxController
           plPlayerController.cacheAudioQa,
         );
         audioUrl = VideoUtils.getCdnUrl(firstAudio.playUrls, isAudio: true);
+        _ripperAudio = _ripperSourceOf(firstAudio);
         currentAudioQa = AudioQuality.fromCode(firstAudio.id);
       } else {
         audioUrl = '';
+        _ripperAudio = null;
       }
       await initPlayerIfNeeded(autoFullScreenFlag);
     } else {
@@ -1264,6 +1284,7 @@ class VideoDetailController extends GetxController
     defaultST = null;
     videoUrl = null;
     audioUrl = null;
+    _ripperVideo = _ripperAudio = null;
 
     // danmaku
     savedDanmaku = null;
@@ -1546,6 +1567,8 @@ class VideoDetailController extends GetxController
           TextButton(
             onPressed: () {
               Get.back();
+              if (videoUrl != this.videoUrl) _ripperVideo = null;
+              if (audioUrl != this.audioUrl) _ripperAudio = null;
               this.videoUrl = videoUrl;
               this.audioUrl = audioUrl;
               playerInit();

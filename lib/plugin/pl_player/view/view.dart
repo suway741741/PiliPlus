@@ -49,6 +49,7 @@ import 'package:PiliPlus/plugin/pl_player/widgets/common_btn.dart';
 import 'package:PiliPlus/plugin/pl_player/widgets/forward_seek.dart';
 import 'package:PiliPlus/plugin/pl_player/widgets/mpv_convert_webp.dart';
 import 'package:PiliPlus/plugin/pl_player/widgets/play_pause_btn.dart';
+import 'package:PiliPlus/services/thread_ripper/thread_ripper.dart';
 import 'package:PiliPlus/utils/android/bindings.g.dart';
 import 'package:PiliPlus/utils/cache_manager.dart';
 import 'package:PiliPlus/utils/connectivity_utils.dart';
@@ -334,6 +335,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) ThreadRipper.onResume();
     // Keep playing in the PiP window.
     if (Platform.isIOS && IOSPipHelper.isActive) return;
     if (!plPlayerController.continuePlayInBackground.value) {

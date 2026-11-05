@@ -30,6 +30,7 @@ import 'package:PiliPlus/plugin/pl_player/models/video_fit_type.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/danmaku_options.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/fullscreen.dart';
 import 'package:PiliPlus/services/service_locator.dart';
+import 'package:PiliPlus/services/thread_ripper/thread_ripper.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/android/android_helper.dart';
 import 'package:PiliPlus/utils/android/bindings.g.dart';
@@ -896,6 +897,38 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   late final buffer = Pref.initBuffer(_playbackSpeed.value);
   late final liveBuffer = Pref.initLiveBuffer();
 
+  /// 线程撕裂者: the tracks of the media mpv plays, served by the local proxy.
+  RipperSession? _ripperSession;
+  int _ripperGeneration = 0;
+  // An open or a seek waits for data by design; only a wait while playing on is a stall.
+  bool _ripperRestarting = false;
+  Timer? _ripperRestartTimer;
+  double _ripperReportedAt = 0;
+
+  void _markRipperRestart() {
+    _ripperRestarting = true;
+    // A seek inside the buffer never waits; the mark must not swallow the next stall.
+    _ripperRestartTimer?.cancel();
+    _ripperRestartTimer = Timer(const Duration(seconds: 3), () {
+      if (!isBuffering.value) _ripperRestarting = false;
+    });
+  }
+
+  void _reportRipper({bool force = false}) {
+    if (_ripperSession == null) return;
+    final state = _videoPlayerController?.state;
+    if (state == null) return;
+    final now = DateTime.now().millisecondsSinceEpoch.toDouble();
+    if (!force && now - _ripperReportedAt < 250) return;
+    _ripperReportedAt = now;
+    final ahead = (state.buffer - state.position).inMilliseconds / 1000;
+    ThreadRipper.onPlayback(
+      aheadSeconds: ahead,
+      playing: state.playing,
+      rate: state.rate,
+    );
+  }
+
   // 配置播放器
   Future<void> _createVideoController(
     DataSource dataSource,
@@ -935,7 +968,37 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     };
 
     String video = dataSource.videoSource;
-    if (dataSource.audioSource case final audio? when (audio.isNotEmpty)) {
+    String? audioSource = dataSource.audioSource;
+    final generation = ++_ripperGeneration;
+    final previousSession = _ripperSession;
+    _ripperSession = null;
+    if (!isLive &&
+        ThreadRipper.enabled &&
+        dataSource is NetworkSource &&
+        dataSource.ripperVideo != null) {
+      try {
+        final (session, videoUrl, audioUrl) = await ThreadRipper.open(
+          dataSource.ripperVideo!,
+          dataSource.ripperAudio,
+        );
+        if (generation != _ripperGeneration || _playerCount == 0) {
+          // A newer media took over meanwhile.
+          session.close();
+          previousSession?.close();
+          return;
+        }
+        if (videoUrl != null) {
+          _ripperSession = session;
+          video = videoUrl;
+          if (audioUrl != null) audioSource = audioUrl;
+        } else {
+          session.close();
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('thread ripper: $e');
+      }
+    }
+    if (audioSource case final audio? when (audio.isNotEmpty)) {
       if (onlyPlayAudio.value) {
         video = audio;
       } else {
@@ -953,14 +1016,20 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     }
 
     assert(!isLive || seekTo == null);
-    await player.open(
-      Media(
-        video,
-        start: seekTo,
-        extras: extras.isEmpty ? null : extras,
-      ),
-      play: false,
-    );
+    _markRipperRestart();
+    try {
+      await player.open(
+        Media(
+          video,
+          start: seekTo,
+          extras: extras.isEmpty ? null : extras,
+        ),
+        play: false,
+      );
+    } finally {
+      // mpv has let go of the previous media's streams by now.
+      previousSession?.close();
+    }
   }
 
   Future<void>? refreshPlayer() {
@@ -1097,6 +1166,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         for (final element in _positionListeners) {
           element(position);
         }
+        _reportRipper();
       }),
       stream.duration.listen((Duration duration) {
         updateDuration(duration);
@@ -1104,9 +1174,18 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       }),
       stream.buffer.listen((Duration buffer) {
         buffered.value = buffer.inSeconds;
+        _reportRipper();
       }),
       stream.buffering.listen((bool buffering) {
         isBuffering.value = buffering;
+        if (_ripperSession != null) {
+          if (!buffering) {
+            _ripperRestarting = false;
+          } else if (!_ripperRestarting && player.state.playing) {
+            ThreadRipper.onStall();
+          }
+          _reportRipper(force: true);
+        }
         if (!playerStatus.isCompleted) {
           _stopWakeLockTimer();
           _updatePlaybackState();
@@ -1136,8 +1215,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           }
           return;
         }
-        if (event.startsWith("Failed to open https://") ||
-            event.startsWith("Can not open external file https://") ||
+        // http: also 线程撕裂者's local proxy.
+        if (event.startsWith("Failed to open http") ||
+            event.startsWith("Can not open external file http") ||
             //tcp: ffurl_read returned 0xdfb9b0bb
             //tcp: ffurl_read returned 0xffffff99
             event.startsWith('tcp: ffurl_read returned ')) {
@@ -1193,6 +1273,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   Future<void> seek(Duration position, {bool isSeek = false}) async {
+    if (_ripperSession != null) _markRipperRestart();
     if (isSeek) {
       /// 拖动进度条调节时，不等待第一帧，防止抖动
       await _videoPlayerController?.stream.buffer.first;
@@ -1733,6 +1814,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _videoPlayerController?.dispose();
     _videoPlayerController = null;
     _videoController = null;
+    _ripperSession?.close();
+    _ripperSession = null;
+    _ripperRestartTimer?.cancel();
     _instance = null;
     videoPlayerServiceHandler?.clear();
   }

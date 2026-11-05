@@ -1,3 +1,5 @@
+import 'package:PiliPlus/services/thread_ripper/thread_ripper.dart'
+    show RipperSource;
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:path/path.dart' as path;
 
@@ -15,7 +17,13 @@ class NetworkSource extends DataSource {
   NetworkSource({
     required super.videoSource,
     required super.audioSource,
+    this.ripperVideo,
+    this.ripperAudio,
   });
+
+  /// Every address of the DASH tracks, for 线程撕裂者; null when not a DASH video.
+  final RipperSource? ripperVideo;
+  final RipperSource? ripperAudio;
 }
 
 class FileSource extends DataSource {

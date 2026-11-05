@@ -657,6 +657,25 @@ abstract final class Pref {
   static bool get disableAudioCDN =>
       _setting.get(SettingBoxKey.disableAudioCDN, defaultValue: false);
 
+  static bool get threadRipperEnabled =>
+      _setting.get(SettingBoxKey.threadRipperEnabled, defaultValue: true);
+
+  static String get threadRipperMode =>
+      _setting.get(SettingBoxKey.threadRipperMode, defaultValue: 'mainland');
+
+  static int get threadRipperConcurrency =>
+      _setting.get(SettingBoxKey.threadRipperConcurrency, defaultValue: 8);
+
+  static bool get threadRipperAutoConcurrency => _setting.get(
+    SettingBoxKey.threadRipperAutoConcurrency,
+    defaultValue: true,
+  );
+
+  static List<String> get threadRipperCustomHosts =>
+      (_setting.get(SettingBoxKey.threadRipperCustomHosts) as List?)
+          ?.cast<String>() ??
+      const [];
+
   static int get minDurationForRcmd =>
       _setting.get(SettingBoxKey.minDurationForRcmd, defaultValue: 0);
 
