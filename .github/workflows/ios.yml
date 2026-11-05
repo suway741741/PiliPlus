@@ -13,12 +13,19 @@ on:
 jobs:
   build-macos-app:
     name: Release IOS
-    runs-on: macos-26
+    # Xcode 27.1 (iOS 27.1 SDK): an app built with an older SDK runs letterboxed in the
+    # middle of the iPhone Duo's inner display.
+    runs-on: xcode-27
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Show Xcode
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Setup flutter
         uses: subosito/flutter-action@v2
@@ -41,6 +48,8 @@ jobs:
           # make AltSign happy...
           find Payload/Runner.app/Frameworks -type d -name "*.framework" -exec codesign --force --sign - --preserve-metadata=identifier,entitlements {} \;
           zip -r9 PiliPlus_ios_${{env.version}}.ipa Payload/Runner.app
+          # The SDK the app is built against decides how iPhone Duo shows it.
+          plutil -p Payload/Runner.app/Info.plist | grep -E '"DT(SDKName|XcodeBuild|PlatformVersion)"'
 
       - name: Release
         if: ${{ github.event.inputs.tag != '' }}
