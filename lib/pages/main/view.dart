@@ -19,6 +19,7 @@ import 'package:PiliPlus/utils/extension/size_ext.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
 import 'package:PiliPlus/utils/mobile_observer.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
+import 'package:PiliPlus/utils/status_bar_column.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/services.dart';
@@ -71,10 +72,12 @@ class _MainAppState extends PopScopeState<MainApp>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _padding = MediaQuery.viewPaddingOf(context);
-    _sideBarAtEnd =
-        Platform.isIOS &&
-        Pref.sideBarFollowStatusBar &&
-        _padding.right > _padding.left + 20;
+    // also remembers the column for the video page, which may hide the status bar
+    final statusBarAtEnd = StatusBarColumn.atEnd(
+      _padding,
+      MediaQuery.sizeOf(context),
+    );
+    _sideBarAtEnd = statusBarAtEnd && Pref.sideBarFollowStatusBar;
     _colorScheme = ColorScheme.of(context);
     final brightness = _colorScheme.brightness;
     NetworkImgLayer.reduce =
@@ -250,27 +253,104 @@ class _MainAppState extends PopScopeState<MainApp>
     return bottomNav;
   }
 
+  /// The side bar in the status bar's column (iPhone Duo's inner display): two floating
+  /// capsules of icons, the account and search below the status bar and the pages at
+  /// the bottom.
+  Widget _sideBarInStatusBarColumn() {
+    final colorScheme = _colorScheme;
+    final decoration = ShapeDecoration(
+      color: colorScheme.surfaceContainerLow,
+      shape: StadiumBorder(
+        side: BorderSide(color: colorScheme.outline.withValues(alpha: 0.12)),
+      ),
+      shadows: [
+        BoxShadow(
+          color: colorScheme.shadow.withValues(alpha: 0.08),
+          blurRadius: 12,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    );
+    Widget capsule(Widget child) => Container(
+      width: 56,
+      padding: const .symmetric(vertical: 8),
+      decoration: decoration,
+      child: child,
+    );
+    return SizedBox(
+      width: math.max(80, _padding.right),
+      child: MediaQuery.removePadding(
+        context: context,
+        removeLeft: true,
+        removeRight: true,
+        removeTop: true,
+        removeBottom: true,
+        child: Column(
+          children: [
+            SizedBox(height: _statusBarExtent),
+            capsule(userAndSearchVertical()),
+            const Spacer(),
+            if (_mainController.navigationBars.length > 1)
+              capsule(
+                Obx(() {
+                  final selectedIndex = _mainController.selectedIndex.value;
+                  final navigationBars = _mainController.navigationBars;
+                  return Column(
+                    mainAxisSize: .min,
+                    spacing: 4,
+                    children: [
+                      for (var i = 0; i < navigationBars.length; i++)
+                        _capsuleDestination(
+                          navigationBars[i],
+                          i,
+                          selected: i == selectedIndex,
+                        ),
+                    ],
+                  );
+                }),
+              ),
+            SizedBox(height: math.max(16, _padding.bottom + 8)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _capsuleDestination(
+    NavigationBarType type,
+    int index, {
+    required bool selected,
+  }) {
+    final colorScheme = _colorScheme;
+    return IconButton(
+      tooltip: type.label,
+      isSelected: selected,
+      onPressed: () => _mainController.setIndex(index),
+      style: IconButton.styleFrom(
+        backgroundColor: selected ? colorScheme.secondaryContainer : null,
+        foregroundColor: selected
+            ? colorScheme.onSecondaryContainer
+            : colorScheme.onSurfaceVariant,
+      ),
+      icon: _buildIcon(type: type, selected: selected),
+    );
+  }
+
   Widget _sideBar() {
+    if (_sideBarAtEnd) return _sideBarInStatusBarColumn();
     if (_mainController.navigationBars.length > 1) {
       if (context.isTablet && _mainController.optTabletNav) {
-        final atEnd = _sideBarAtEnd;
         return Padding(
-          padding: .only(top: atEnd ? _statusBarExtent : 25),
+          padding: const .only(top: 25),
           child: MediaQuery.removePadding(
             context: context,
             removeRight: true,
-            removeLeft: atEnd,
-            removeTop: atEnd,
             child: Obx(
               () => DrawerTheme(
                 data: DrawerThemeData(
-                  width: atEnd
-                      ? math.max(
-                          _mainController.hideSideBarLabel ? 80.0 : 130.0,
-                          _padding.right,
-                        )
-                      : (_mainController.hideSideBarLabel ? 80 : 130) +
-                            _padding.left,
+                  width:
+                      (_mainController.hideSideBarLabel ? 80 : 130) +
+                      _padding.left,
                 ),
                 child: NavigationDrawer(
                   /// apply `lib/scripts/navigation_drawer.patch`
@@ -310,7 +390,7 @@ class _MainAppState extends PopScopeState<MainApp>
           ),
         );
       }
-      final rail = Obx(
+      return Obx(
         () => NavigationRail(
           groupAlignment: 0.5,
           labelType: _mainController.hideSideBarLabel ? .none : .selected,
@@ -328,27 +408,6 @@ class _MainAppState extends PopScopeState<MainApp>
               )
               .toList(),
         ),
-      );
-      if (!_sideBarAtEnd) return rail;
-      return Container(
-        width: math.max(80, _padding.right),
-        alignment: .topCenter,
-        padding: .only(top: _statusBarExtent),
-        child: MediaQuery.removePadding(
-          context: context,
-          removeLeft: true,
-          removeRight: true,
-          removeTop: true,
-          child: rail,
-        ),
-      );
-    }
-    if (_sideBarAtEnd) {
-      return Container(
-        width: math.max(80, _padding.right),
-        alignment: .topCenter,
-        margin: .only(top: 12 + _statusBarExtent),
-        child: userAndSearchVertical(),
       );
     }
     return Container(
@@ -390,17 +449,19 @@ class _MainAppState extends PopScopeState<MainApp>
       }
       padding = _padding.copyWith(bottom: 0);
     } else {
-      final divider = BorderSide(
-        color: _colorScheme.outline.withValues(alpha: 0.06),
-      );
-      sideBar = DecoratedBox(
-        decoration: BoxDecoration(
-          border: _sideBarAtEnd
-              ? Border(left: divider)
-              : Border(right: divider),
-        ),
-        child: _sideBar(),
-      );
+      // The capsules in the status bar's column need no divider.
+      sideBar = _sideBarAtEnd
+          ? _sideBar()
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: _colorScheme.outline.withValues(alpha: 0.06),
+                  ),
+                ),
+              ),
+              child: _sideBar(),
+            );
       // On the right, the side bar takes the status bar's column itself.
       padding = _sideBarAtEnd
           ? .only(top: _padding.top, left: _padding.left)

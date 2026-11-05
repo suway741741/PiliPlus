@@ -66,6 +66,7 @@ import 'package:PiliPlus/utils/mobile_observer.dart';
 import 'package:PiliPlus/utils/num_utils.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
+import 'package:PiliPlus/utils/status_bar_column.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/theme_utils.dart';
@@ -455,13 +456,15 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final viewPadding = MediaQuery.viewPaddingOf(context);
     if (videoDetailController.removeSafeArea) {
       padding = .zero;
     } else {
-      padding = MediaQuery.viewPaddingOf(context);
+      padding = viewPadding;
     }
 
     final size = MediaQuery.sizeOf(context);
+    _statusBarColumnAtEnd = StatusBarColumn.atEnd(viewPadding, size);
     maxWidth = size.width;
     maxHeight = size.height;
     isWindowMode = MaxScreenSize.isWindowMode(
@@ -775,22 +778,36 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     },
   );
 
-  Widget childSplit(double ratio) {
+  Widget childSplit(double ratio) =>
+      _childSplit((maxHeight - padding.vertical) * ratio);
+
+  /// The player on the left at full height, [width] wide, and the intro and replies in
+  /// the panel beside it. [blackBelow] paints the bottom inset under the player black,
+  /// so the player's column reads as one from top to bottom.
+  Widget _childSplit(double width, {bool blackBelow = false}) {
     final double videoHeight = maxHeight - padding.vertical;
-    final double width = videoHeight * ratio;
     final videoWidth = isFullScreen ? maxWidth : width;
     final introWidth = maxWidth - width - padding.horizontal;
+    Widget player = SizedBox(
+      width: videoWidth,
+      height: videoHeight,
+      child: videoPlayer(
+        width: videoWidth,
+        height: videoHeight,
+      ),
+    );
+    if (blackBelow && !isFullScreen && padding.bottom > 0) {
+      player = Container(
+        color: Colors.black,
+        height: maxHeight - padding.top,
+        alignment: .topCenter,
+        child: player,
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: videoWidth,
-          height: videoHeight,
-          child: videoPlayer(
-            width: videoWidth,
-            height: videoHeight,
-          ),
-        ),
+        player,
         Offstage(
           offstage: isFullScreen,
           child: SizedBox(
@@ -891,10 +908,25 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   }
 
   Widget _childWhenDisabledLandscapeInner(bool isFullScreen) {
+    // Split the width the safe area leaves, so a wide inset (iPhone Duo's inner display
+    // keeps the status bar in a column on the right) does not come out of the panel.
+    // The panel's minimum fits a related video card: a 160 wide cover, its padding,
+    // and the title and stats beside it.
+    final double availableWidth = maxWidth - padding.horizontal;
+    if (_statusBarColumnAtEnd && !videoDetailController.isFileSource) {
+      // iPhone Duo's inner display is too square for the video above the intro: the
+      // player takes the whole height and the intro, with the related videos, goes in
+      // the panel beside it, like on the official client.
+      return _childSplit(
+        availableWidth - clampDouble(availableWidth * 0.37, 320, 425),
+        blackBelow: true,
+      );
+    }
     double width =
-        clampDouble(maxHeight / maxWidth * 1.08, 0.5, 0.7) * maxWidth;
-    if (maxWidth >= 560) {
-      width = maxWidth - clampDouble(maxWidth - width, 280, 425);
+        clampDouble(maxHeight / availableWidth * 1.08, 0.5, 0.7) *
+        availableWidth;
+    if (availableWidth >= 560) {
+      width = availableWidth - clampDouble(availableWidth - width, 320, 425);
     }
     final videoWidth = isFullScreen ? maxWidth : width;
     final double height = width / Style.aspectRatio16x9;
@@ -940,7 +972,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         Offstage(
           offstage: isFullScreen,
           child: SizedBox(
-            width: maxWidth - width - padding.horizontal,
+            width: availableWidth - width,
             height: maxHeight - padding.top,
             child: MiniScaffold(
               key: videoDetailController.childKey,
@@ -1257,6 +1289,9 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   late double maxHeight;
   bool isWindowMode = false;
   late EdgeInsets padding;
+
+  /// iPhone Duo's inner display, with the status bar in a column on the right.
+  bool _statusBarColumnAtEnd = false;
 
   @override
   Widget build(BuildContext context) {
