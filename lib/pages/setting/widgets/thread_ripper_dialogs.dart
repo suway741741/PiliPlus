@@ -35,8 +35,8 @@ Future<void> showThreadRipperModeDialog(
       title: 'CDN 模式',
       value: ThreadRipper.settings.mode,
       values: RipperCdnMode.values.map((e) => (e, e.desc)).toList(),
-      subtitleBuilder: (context, index) => Text(
-        switch (RipperCdnMode.values[index]) {
+      subtitleBuilder: (context, index, mode) => Text(
+        switch (mode) {
           RipperCdnMode.mainland => '推荐，多个大陆节点一起下载',
           RipperCdnMode.overseas => '本地连大陆网络太差时使用',
           RipperCdnMode.custom => '只用你选的服务器',
