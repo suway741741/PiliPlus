@@ -911,8 +911,10 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     // Split the width the safe area leaves, so a wide inset (iPhone Duo's inner display
     // keeps the status bar in a column on the right) does not come out of the panel.
     // The panel's minimum fits a related video card: a 160 wide cover, its padding,
-    // and the title and stats beside it.
+    // and the title and stats beside it. A narrow screen keeps the old, smaller minimum:
+    // the intro under the video needs 400 for the uploader and the action buttons.
     final double availableWidth = maxWidth - padding.horizontal;
+    final double minPanelWidth = availableWidth >= 720 ? 320 : 280;
     if (_statusBarColumnAtEnd && !videoDetailController.isFileSource) {
       // iPhone Duo's inner display is too square for the video above the intro: the
       // player takes the whole height and the intro, with the related videos, goes in
@@ -926,7 +928,9 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         clampDouble(maxHeight / availableWidth * 1.08, 0.5, 0.7) *
         availableWidth;
     if (availableWidth >= 560) {
-      width = availableWidth - clampDouble(availableWidth - width, 320, 425);
+      width =
+          availableWidth -
+          clampDouble(availableWidth - width, minPanelWidth, 425);
     }
     final videoWidth = isFullScreen ? maxWidth : width;
     final double height = width / Style.aspectRatio16x9;
