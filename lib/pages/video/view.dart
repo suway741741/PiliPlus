@@ -915,7 +915,9 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     // the intro under the video needs 400 for the uploader and the action buttons.
     final double availableWidth = maxWidth - padding.horizontal;
     final double minPanelWidth = availableWidth >= 720 ? 320 : 280;
-    if (_statusBarColumnAtEnd && !videoDetailController.isFileSource) {
+    if (_statusBarColumnAtEnd &&
+        availableWidth >= 720 &&
+        !videoDetailController.isFileSource) {
       // iPhone Duo's inner display is too square for the video above the intro: the
       // player takes the whole height and the intro, with the related videos, goes in
       // the panel beside it, like on the official client.

@@ -42,9 +42,26 @@ class _MainAppState extends PopScopeState<MainApp>
   /// the system keeps the status bar in a column on the right edge, the only thing in it.
   bool _sideBarAtEnd = false;
 
+  /// The mirror case: a column on the left edge that holds only the camera (iPhone Duo
+  /// folded, in landscape). The side bar goes in it, below the camera.
+  bool _sideBarAtStart = false;
+
+  bool get _sideBarInColumn => _sideBarAtEnd || _sideBarAtStart;
+
+  /// The width of the column the side bar shares.
+  double get _columnInset => _sideBarAtEnd ? _padding.right : _padding.left;
+
   /// How far down that column the status bar (time, signal, battery) reaches. iOS gives
   /// the whole column as one inset, so this is an estimate from its width.
-  double get _statusBarExtent => math.max(_padding.right * 1.3, 110.0);
+  double get _statusBarExtent {
+    // Folded and upright, the camera sits in the column above the status bar.
+    final size = MediaQuery.sizeOf(context);
+    if (_sideBarAtEnd && size.height > size.width) {
+      return math.max(_columnInset * 1.7, 165.0);
+    }
+    return math.max(_columnInset * 1.3, 110.0);
+  }
+
   Brightness? _brightness;
 
   @override
@@ -76,6 +93,11 @@ class _MainAppState extends PopScopeState<MainApp>
       MediaQuery.sizeOf(context),
     );
     _sideBarAtEnd = statusBarAtEnd && Pref.sideBarFollowStatusBar;
+    _sideBarAtStart =
+        !_sideBarAtEnd &&
+        Platform.isIOS &&
+        Pref.sideBarFollowStatusBar &&
+        _padding.left > _padding.right + 20;
     _colorScheme = ColorScheme.of(context);
     final brightness = _colorScheme.brightness;
     NetworkImgLayer.reduce =
@@ -89,7 +111,10 @@ class _MainAppState extends PopScopeState<MainApp>
       }
     }
     if (!_mainController.useSideBar) {
-      _mainController.useBottomNav = MediaQuery.isPortraitOf(context);
+      // With a column to put the side bar in, portrait needs no bottom bar either: the
+      // column would stay empty beside it.
+      _mainController.useBottomNav =
+          !_sideBarInColumn && MediaQuery.isPortraitOf(context);
     }
   }
 
@@ -276,7 +301,7 @@ class _MainAppState extends PopScopeState<MainApp>
       child: child,
     );
     return SizedBox(
-      width: math.max(80, _padding.right),
+      width: math.max(80, _columnInset),
       child: MediaQuery.removePadding(
         context: context,
         removeLeft: true,
@@ -335,7 +360,7 @@ class _MainAppState extends PopScopeState<MainApp>
   }
 
   Widget _sideBar() {
-    if (_sideBarAtEnd) return _sideBarInStatusBarColumn();
+    if (_sideBarInColumn) return _sideBarInStatusBarColumn();
     if (_mainController.navigationBars.length > 1) {
       if (MediaQuery.isTabletOf(context) && _mainController.optTabletNav) {
         return Padding(
@@ -448,7 +473,7 @@ class _MainAppState extends PopScopeState<MainApp>
       padding = _padding.copyWith(bottom: 0);
     } else {
       // The capsules in the status bar's column need no divider.
-      sideBar = _sideBarAtEnd
+      sideBar = _sideBarInColumn
           ? _sideBar()
           : DecoratedBox(
               decoration: BoxDecoration(
@@ -464,6 +489,7 @@ class _MainAppState extends PopScopeState<MainApp>
       padding = _sideBarAtEnd
           ? .only(top: _padding.top, left: _padding.left)
           : .only(top: _padding.top, right: _padding.right);
+      // (at the start the side bar already covers the left inset, as it always has)
     }
 
     child = Material(
