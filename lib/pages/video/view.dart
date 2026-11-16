@@ -984,7 +984,8 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   buildTabBar(
-                    introText: '相关视频',
+                    // three tabs and the danmaku button share a narrow panel
+                    introText: availableWidth - width < 320 ? '相关' : '相关视频',
                     showIntro: videoDetailController.isFileSource
                         ? true
                         : showIntro,
@@ -1693,7 +1694,11 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
             showEpisodes: showEpisodes,
             onShowMemberPage: onShowMemberPage,
             isPortrait: isPortrait,
-            isHorizontal: isHorizontal ?? width! / height! >= kScreenRatio,
+            // The uploader and the action buttons share a row when horizontal, which
+            // takes about 560; a narrower intro stacks them however flat it is.
+            isHorizontal:
+                isHorizontal ??
+                (width! >= 560 && width / height! >= kScreenRatio),
           ),
           if (needRelated && videoDetailController.showRelatedVideo) ...[
             SliverToBoxAdapter(
